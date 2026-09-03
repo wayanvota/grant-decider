@@ -2,10 +2,10 @@
 
 **Product name:** Funder Pursuit Advisor  
 **Status:** Approved for controlled prototype  
-**Version:** 0.2  
+**Version:** 0.3
 **Date:** September 3, 2026  
 **Owner:** Wayan Vota  
-**Build status:** Initial prototype implemented
+**Build status:** Kindora evidence-layer implementation approved
 
 ## Product decision
 
@@ -80,7 +80,8 @@ The first release will not:
 - Rank a nonprofit's mission, worthiness, or leadership.
 - Infer a private relationship from public co-occurrence.
 - Treat assets, total giving, or a prominent grantee as evidence of accessibility.
-- Purchase or depend on proprietary foundation databases.
+- Import a vendor's fit score or let an external data provider make the final pursuit decision.
+- Build a bulk prospecting database, scrape Kindora, or expose unrestricted Kindora search through the public interface.
 - Crawl authenticated sources, private CRMs, email, or social accounts.
 - Make allegations about a foundation or its staff.
 - Automatically turn `PURSUE` into a proposal workflow.
@@ -126,6 +127,12 @@ The tool searches and reads, where publicly accessible:
 - Credible independent reporting
 - Public grantee announcements that identify the foundation, amount, purpose, and date
 
+Kindora is the primary structured evidence source for foundation identity, 990 summaries, itemized grant histories, giving statistics, and open foundation programs. The integration uses a fixed allowlist of read-only public MCP tools: `search_funders`, `get_funder_profile`, `get_990_summary`, `get_foundation_grants`, `get_funder_stats`, and `search_open_grants`. `find_funders_of_nonprofit` and `find_funders_for_peers` may be added to a later controlled relationship-research step, but they do not establish a warm path and are not required for the first integration.
+
+Kindora's records are evidence inputs, not conclusions. The retrieval layer must normalize the returned records, preserve Kindora record identifiers and source links when present, identify the source owner as Kindora, and show when the underlying filing or foundation page could not be opened. A Kindora-derived hard-gate claim requires a direct underlying source link or corroboration from the foundation, IRS, or filing. Kindora failure or rate limiting must not fail the entire review: the system falls back to ProPublica/IRS lookup plus public web research, lowers confidence, and names the missing structured source.
+
+Kindora describes its public MCP server as a read-only source built from public filings, government portals, funder websites, and verified open-web reporting. Its public endpoint requires no account and is rate limited. Coverage and freshness figures are vendor-reported and must not be presented as independently validated product facts. Sources: [Kindora MCP documentation](https://www.kindora.co/en/mcp) and [Kindora developer documentation](https://www.kindora.co/en/developers).
+
 The IRS publishes recent 990-series filings in machine-readable XML, and its Tax Exempt Organization Search provides filing and tax-status records. [IRS Form 990 series downloads](https://www.irs.gov/charities-non-profits/form-990-series-downloads) and [IRS Tax Exempt Organization Search](https://www.irs.gov/charities-non-profits/search-for-tax-exempt-organizations). ProPublica's Nonprofit Explorer API can speed entity lookup and filing discovery, but it is a secondary access layer whose responses and availability must be validated against the underlying filing. [Nonprofit Explorer API](https://projects.propublica.org/nonprofits/api/).
 
 For private foundations, Form 990-PF requires reporting of grants paid or approved for future payment, including recipient, status, amount, and purpose. That makes the filing a strong source for revealed grantmaking behavior, but it does not prove current openness, intent, impact, or whether a grant arose from an existing relationship. [2025 Instructions for Form 990-PF, Part XIV](https://www.irs.gov/pub/irs-pdf/i990pf.pdf).
@@ -140,6 +147,8 @@ Every extracted claim becomes a structured record:
 | Value | Normalized value used in analysis |
 | Source URL | Direct link to the page, document, or filing |
 | Source owner | Foundation, IRS, grantee, news outlet, or other |
+| Provider record ID | Kindora or other retrieval-provider identifier when supplied |
+| Underlying source URL | Direct filing, foundation, government, or grantee URL when supplied by an aggregator |
 | Publication or filing date | Exact when known |
 | Tax period | Required for filing-derived facts |
 | Retrieval date | When the tool accessed it |
@@ -261,16 +270,20 @@ Use sources in this order, while recognizing that different sources answer diffe
 
 1. Current official eligibility and application instructions
 2. Filed Form 990-PF or other applicable return
-3. Official annual report, audited financial statement, grant database, or award announcement
-4. Public grantee announcement with identifiable amount, purpose, and date
-5. Credible independent reporting
-6. Search-result snippets or unsourced aggregators, which may locate evidence but cannot support a final decision
+3. Kindora structured records linked to an underlying filing, foundation page, government portal, or grantee source
+4. Official annual report, audited financial statement, grant database, or award announcement
+5. Public grantee announcement with identifiable amount, purpose, and date
+6. Credible independent reporting
+7. Aggregated records without an underlying source link, which may support pattern analysis but cannot alone trigger a hard gate
+8. Search-result snippets or unsourced aggregators, which may locate evidence but cannot support a final decision
 
 When sources conflict, show both and lower confidence. Current application rules govern current eligibility. Recent filings provide stronger evidence of past behavior. Neither should silently overwrite the other.
 
 ## Agent design
 
 The recommended architecture is one decision agent with shared session context and modular skills. A foundation inquiry combines identity, website evidence, filings, grant records, nonprofit constraints, and pursuit economics. Splitting those into conversational handoffs would increase the risk of lost context. Anthropic recommends a single agent with skills for tightly coupled commerce sessions and reserves delegation for bounded, self-contained research work. [Anthropic architecture guide](https://claude.com/blog/the-anatomy-of-effective-commerce-agents).
+
+Structured retrieval is deterministic and precedes model synthesis. The server calls the fixed Kindora tool allowlist directly, with bounded result counts, timeouts, and no model-controlled expansion of the tool surface. It then passes normalized, source-labeled records to the existing OpenAI research step. The model may interpret relevance and contradictions, but code retains the final decision gates. OpenAI's Responses API supports MCP tools, but this release uses server-controlled MCP calls so retrieval behavior, call budgets, provenance, and fallback logic remain inspectable. [OpenAI Responses API reference](https://developers.openai.com/api/reference/cli/resources/responses/methods/create).
 
 ### System prompt responsibilities
 
@@ -292,6 +305,7 @@ Rules needed on almost every run:
 - `website-diligence`: discover, retrieve, date, and extract official pages and PDFs
 - `filing-analysis`: parse recent 990-series filings and grant schedules
 - `grant-pattern-analysis`: normalize recipients, amounts, purposes, geography, and repeat funding
+- `kindora-structured-research`: retrieve and normalize bounded Kindora identity, filing, grant, statistics, and open-program records
 - `nonprofit-fit`: compare evidence with the nonprofit profile without redefining strategy
 - `pursuit-economics`: calculate user-supplied time and cost thresholds
 - `decision-memo`: apply the output contract and produce the evidence-led recommendation
@@ -305,6 +319,8 @@ Rules needed on almost every run:
 - `extract_pdf(document_id)`
 - `fetch_irs_filings(ein, tax_period_limit)`
 - `parse_990pf_grants(filing_id)`
+- `call_kindora(tool_name, approved_arguments)`
+- `normalize_kindora_records(tool_results)`
 - `normalize_grantee(record)`
 - `compare_patterns(nonprofit_profile, evidence_ledger)`
 - `calculate_pursuit_cost(user_inputs)`
@@ -364,6 +380,7 @@ Safety rules must live in code where possible:
 - `location`
 - `identity_confidence`
 - `identity_evidence[]`
+- `kindora_funder_id`
 
 ### Source record
 
@@ -379,6 +396,9 @@ Safety rules must live in code where possible:
 - `extraction_method`
 - `ocr_used`
 - `is_primary`
+- `retrieval_provider`
+- `provider_record_id`
+- `underlying_source_url`
 
 ### Decision record
 
@@ -415,6 +435,9 @@ Safety rules must live in code where possible:
 - Retrieve up to three recent usable filings by default.
 - Show every access failure and blocked source.
 - Stop within configured page, file, time, and cost limits.
+- Call only the approved, read-only Kindora tool allowlist with a maximum of six calls per review.
+- Send only the foundation name, URL, EIN, and bounded search terms to Kindora. Keep the nonprofit's full profile inside the Funder Pursuit Advisor backend.
+- Identify requests with `X-Kindora-Client: Funder Pursuit Advisor`.
 
 ### FR3: Filing analysis
 
@@ -424,6 +447,20 @@ Safety rules must live in code where possible:
 - Preserve recipient names, locations, amounts, and purposes as filed.
 - Flag scanned, malformed, group, amended, short-period, or otherwise unusable filings.
 - Never treat a missing extracted schedule as zero grantmaking.
+- Use Kindora itemized grant records as the primary normalized grant-history input when available.
+- Preserve the tax period, recipient as filed, resolved recipient identity when supplied, amount, purpose, and provider record identifier.
+- Link each displayed grant to the underlying filing or source when Kindora supplies that link. When it does not, label the record as aggregator-derived and prevent it from independently failing a hard gate.
+
+### FR3A: Kindora structured evidence
+
+- Resolve the foundation with `search_funders`, then verify the selected entity with `get_funder_profile` and the existing EIN checks.
+- Retrieve `get_990_summary`, `get_foundation_grants`, and `get_funder_stats` for the confirmed foundation.
+- Use `search_open_grants` only for the confirmed foundation or an exact foundation identifier, never as an unbounded funder-discovery feature.
+- Normalize Kindora output into a bounded server-owned schema before it enters the model prompt.
+- Preserve tool name, provider record identifier, retrieval timestamp, source URL, tax period, and any data-quality warning.
+- Treat Kindora summaries, classifications, semantic matches, and derived statistics as provider analysis. Distinguish them from underlying filing facts.
+- On timeout, schema change, malformed output, or rate limit, continue with other sources, show the failure, and lower confidence.
+- Do not cache Kindora results beyond the life of a single request until retention permission and invalidation behavior are confirmed.
 
 ### FR4: Evidence comparison
 
@@ -454,6 +491,13 @@ Safety rules must live in code where possible:
 - Make corrections visible in the audit record.
 - Provide no send, submit, or contact action in version 1.
 
+### FR8: Relationship signals
+
+- Show public people, governance, grantee, and peer-funding records as leads for human investigation only.
+- Never label a public co-occurrence, shared funder, board overlap, former employer, event appearance, or grantee pattern as a relationship or warm introduction.
+- Relationship status remains user-confirmed input.
+- Do not call Kindora donor, warm-path, CRM, pipeline-write, fit-score, or paid AI-research tools in the controlled prototype.
+
 ## Nonfunctional requirements
 
 - **Citation integrity:** every visible factual claim links to a stored source record and supporting excerpt or filing field.
@@ -464,6 +508,7 @@ Safety rules must live in code where possible:
 - **Privacy:** nonprofit profiles are private by default; no public browsing of saved reviews; clear retention and deletion controls.
 - **Portability:** provider-specific model calls sit behind a normalized structured-output interface.
 - **Observability:** log tool success, failure, duration, source coverage, citation validation, and decision rule path without logging confidential profile text by default.
+- **Provider resilience:** a Kindora outage or rate limit degrades source coverage and confidence but does not prevent the ProPublica/IRS and web-search fallback from completing.
 
 ## Success metrics
 
@@ -505,6 +550,8 @@ Version 1 is ready for a controlled pilot only when all criteria pass:
 4. The system retrieves and labels current official pages, access failures, and research cutoff dates.
 5. It retrieves up to three recent filings and shows the tax period and filing lag.
 6. It extracts private-foundation grant records with citations back to the filing page, XML element, or attached schedule.
+6a. When Kindora is available, the report shows normalized itemized grants, giving statistics, and any exact-foundation open programs with clear Kindora attribution and underlying source links when supplied.
+6b. When Kindora is unavailable, malformed, or rate limited, the report completes through fallback research, displays a provider warning, and cannot claim grant-pattern completeness.
 7. Every factual statement in the final rationale passes an automated citation-presence check and a human support check in the pilot set.
 8. Explicit geographic, entity-type, or program exclusions trigger `DECLINE` without model override.
 9. Missing filing data never becomes a zero, a negative finding, or an invented estimate.
@@ -514,10 +561,14 @@ Version 1 is ready for a controlled pilot only when all criteria pass:
 13. Unsafe URLs, redirects, oversized files, unsupported formats, and timeouts fail safely and remain visible in the source ledger.
 14. The system creates no external message, application, or contact action.
 15. Users can export a complete Markdown report and JSON audit record.
+16. The server cannot call a Kindora tool outside the code allowlist, exceed six Kindora calls in one review, or send the nonprofit's full profile to Kindora.
+17. Kindora-derived evidence without an underlying source link cannot independently trigger `DECLINE` or confirm legal identity.
 
 ## Evaluation plan
 
 Build the pilot evaluation set before tuning the recommendation prompt.
+
+Run every pilot pair through two conditions: the current ProPublica-plus-web baseline and the Kindora-enhanced retrieval path. Compare identity accuracy, itemized-grant coverage, citation support, decision agreement, latency, source failures, and final recommendation changes. Count a Kindora-driven change as an improvement only when a reviewer confirms that the added evidence supports the new decision.
 
 ### Minimum pilot set
 
@@ -574,6 +625,10 @@ No unsupported decisive claim is acceptable. A conservative `NEEDS HUMAN CHECK` 
 | Numerical score creates false precision | Teams pursue a high score despite a hard stop | Use categorical decisions and explicit gates |
 | Negative inference becomes reputational claim | Tool unfairly characterizes a foundation | Describe observed evidence and gaps without motive claims |
 | User treats `PURSUE` as authorization | Research recommendation causes uncontrolled spending | Require bounded next step, time ceiling, and human confirmation |
+| Kindora record lacks an underlying source link | Aggregated or derived data appears primary | Label it as provider-derived and bar it from independently triggering a hard gate |
+| Kindora schema or tool behavior changes | Parsing fails or silently drops fields | Validate every tool response, show a provider warning, and fall back to other sources |
+| Kindora rate limit or outage | Reviews lose itemized grant coverage | Cap calls, use short timeouts, avoid retries beyond one transient retry, and degrade confidence visibly |
+| Public relationship signals are overstated | Staff waste time chasing a nonexistent warm path | Present leads for investigation only; require user confirmation before access status changes |
 
 ## Release sequence
 
@@ -590,6 +645,7 @@ No unsupported decisive claim is acceptable. A conservative `NEEDS HUMAN CHECK` 
 - One nonprofit profile at a time
 - One foundation at a time
 - Official website plus up to three 990-series filings
+- Kindora structured identity, filing, itemized-grant, statistics, and exact-foundation open-program retrieval
 - Source ledger and categorical decision
 - Markdown and JSON export
 - No accounts, outreach, proposal generation, or batch prospecting
@@ -614,6 +670,9 @@ Proceed only if users consistently honor evidence-backed stop decisions and repo
 4. **Relationship input:** Accept a user-confirmed warm path as nonprofit-supplied context. Prompt the user to name the route and do not treat public co-occurrence as relationship proof.
 5. **Persistence:** Keep the server stateless. Let users opt into browser-only profile storage with a visible deletion control. Export Markdown and JSON reports; server-side decision history remains phase 2 work.
 6. **Model provider:** Use the service's existing OpenAI credential for web research with response storage disabled. Keep extraction behind a normalized structured-output boundary so another provider can be added later.
+7. **Structured data provider:** Use Kindora's public MCP as the primary normalized source for itemized grants and foundation statistics. Retain ProPublica/IRS and current foundation pages for confirmation, provenance, fallback, and contradictions.
+8. **Decision authority:** Do not use Kindora's fit score. Funder Pursuit Advisor retains its nonprofit-specific profile comparison and deterministic final decision rules.
+9. **Relationship evidence:** Kindora grantee, governance, and peer-funding records may suggest people or organizations to investigate. Only the nonprofit can confirm a real access path.
 
 ## Build boundary
 

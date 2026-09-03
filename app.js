@@ -123,6 +123,7 @@
     const cost = result.cost_at_risk === null ? "Not supplied" : formatMoney(result.cost_at_risk);
     const identity = result.identity || {};
     const filing = result.filing_summary || {};
+    const kindora = result.kindora_research || {};
     resultShell.dataset.state = result.recommendation;
     resultShell.innerHTML = `
       <div class="result-hero">
@@ -160,6 +161,7 @@
           ${renderFinding("Observed grant pattern", result.observed_pattern)}
         </div>
       </section>
+      ${renderKindoraResearch(kindora)}
       <section class="result-section">
         <div class="result-section-header"><h3>What could change the decision</h3><p>Counterevidence and gaps stay visible</p></div>
         <div class="finding-grid">
@@ -258,6 +260,66 @@
       </article>`).join("")}</div>`;
   }
 
+  function renderKindoraResearch(data) {
+    const status = data.status || "unavailable";
+    const match = data.matched_funder || {};
+    const stats = data.giving_stats || {};
+    const grants = Array.isArray(data.grants) ? data.grants : [];
+    const programs = Array.isArray(data.open_programs) ? data.open_programs : [];
+    const attributionUrl = safeUrl(data.attribution_url) || "https://www.kindora.co";
+    const profileUrl = safeUrl(match.kindora_url) || attributionUrl;
+    const statusLabel = {
+      available: "Available",
+      partial: "Partially available",
+      ambiguous: "Identity unresolved",
+      not_found: "No matching record",
+      unavailable: "Temporarily unavailable",
+      disabled: "Disabled"
+    }[status] || humanize(status);
+    const statCards = [
+      ["Tracked grants", stats.total_grants === null || stats.total_grants === undefined ? "Unknown" : formatNumber(stats.total_grants)],
+      ["Typical grant", stats.median_grant === null || stats.median_grant === undefined ? "Unknown" : formatMoney(stats.median_grant)],
+      ["Years represented", Array.isArray(stats.years) && stats.years.length ? stats.years.join(", ") : "Unknown"]
+    ];
+    return `<section class="result-section">
+      <div class="result-section-header"><h3>Structured grant evidence</h3><p><a href="${escapeHtml(attributionUrl)}" target="_blank" rel="noopener noreferrer">Data from Kindora ↗</a></p></div>
+      <div class="structured-source-head">
+        <div><p class="finding-label">Kindora status</p><h4>${escapeHtml(statusLabel)}</h4></div>
+        ${match.legal_name ? `<p><strong>${escapeHtml(match.legal_name)}</strong>${match.ein ? ` · EIN ${escapeHtml(match.ein)}` : ""}<br><a class="evidence-link" href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">Open Kindora profile ↗</a></p>` : ""}
+      </div>
+      <div class="structured-stats">${statCards.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
+      <h4 class="subsection-title">Recent itemized grants</h4>
+      ${renderKindoraGrants(grants, profileUrl)}
+      ${programs.length ? `<h4 class="subsection-title">Open programs matched to this EIN</h4>${renderKindoraPrograms(programs)}` : ""}
+      <p class="source-caveat">Kindora records are provider-derived unless an underlying filing or foundation link is shown. They inform pattern analysis but cannot independently force a decline or prove a warm relationship.</p>
+    </section>`;
+  }
+
+  function renderKindoraGrants(grants, profileUrl) {
+    if (!grants.length) return '<p class="empty-note">No itemized Kindora grant records were available for this matched foundation.</p>';
+    return `<div class="structured-grant-list">${grants.map((grant) => {
+      const sourceUrl = safeUrl(grant.underlying_source_url) || profileUrl;
+      const sourceLabel = grant.underlying_source_url ? "Open underlying source" : "Open Kindora record";
+      return `<article class="structured-grant">
+        <div><h5>${escapeHtml(grant.recipient_name || "Recipient not supplied")}</h5><p>${escapeHtml(grant.purpose || "Purpose not supplied")}</p></div>
+        <div class="structured-grant-meta">
+          <strong>${grant.amount === null || grant.amount === undefined ? "Amount not supplied" : escapeHtml(formatMoney(grant.amount))}</strong>
+          <span>${grant.filing_year ? escapeHtml(String(grant.filing_year)) : "Year not supplied"}${grant.recipient_state ? ` · ${escapeHtml(grant.recipient_state)}` : ""}</span>
+          <span>${escapeHtml(grant.source === "990" ? "IRS 990 grant line" : humanize(grant.source || "provider record"))}</span>
+          <a class="evidence-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sourceLabel)} ↗</a>
+        </div>
+      </article>`;
+    }).join("")}</div>`;
+  }
+
+  function renderKindoraPrograms(programs) {
+    return `<div class="evidence-list">${programs.map((program) => `<article class="evidence-card">
+      <div class="evidence-top"><h4>${escapeHtml(program.title || "Open program")}</h4>${sourceLink(program.application_url, "Open application source")}</div>
+      <p>${escapeHtml(program.description || "No description supplied.")}</p>
+      <div class="evidence-meta"><span>${escapeHtml(program.deadline || "Deadline not supplied")}</span><span>${escapeHtml(humanize(program.intake_type || "intake unclear"))}</span></div>
+    </article>`).join("")}</div>`;
+  }
+
   function renderWarnings(warnings) {
     if (!warnings.length) return "";
     return `<section class="result-section"><div class="result-section-header"><h3>Warnings</h3><p>Limits on this result</p></div>${renderList(warnings, "")}</section>`;
@@ -301,7 +363,17 @@
     }
     const gates = (r.hard_gates || []).map((gate) => `- **${md(humanize(gate.category))}: ${md(gate.status.toUpperCase())}.** ${md(gate.reason)}`).join("\n");
     const evidence = (r.evidence_ledger || []).map((item, index) => `${index + 1}. **${md(item.claim)}** [${md(item.source_title)}](${item.source_url})\n   - ${md(item.support)}\n   - ${md(humanize(item.evidence_type))}; ${md(item.confidence)} confidence${item.tax_period ? `; tax period ${md(item.tax_period)}` : ""}`).join("\n");
-    return `# Funder Pursuit Advisor: ${md(r.recommendation)}\n\n**Foundation:** ${md(report.foundationName)}  \n**Nonprofit:** ${md(report.nonprofitName)}  \n**Research cutoff:** ${md(r.research_cutoff)}  \n**Confidence:** ${md(r.confidence)}\n\n## Decision\n\n${md(r.decision_reason)}\n\n**Next action:** ${md(r.next_action)}\n\n${r.reopen_condition ? `**Reopen when:** ${md(r.reopen_condition)}\n\n` : ""}**Hours at risk:** ${r.hours_at_risk ?? "Unknown"}  \n**Staff cost at risk:** ${r.cost_at_risk === null ? "Not supplied" : formatMoney(r.cost_at_risk)}\n\n## Hard gates\n\n${gates || "No hard-gate findings returned."}\n\n## Access\n\n**${md(humanize(r.access.status))}:** ${md(r.access.reason)}\n\n## Observed grant pattern\n\n**${md(humanize(r.observed_pattern.status))}:** ${md(r.observed_pattern.reason)}\n\n## Missing evidence\n\n${(r.missing_evidence || []).map((item) => `- ${md(item)}`).join("\n") || "None recorded."}\n\n## Evidence ledger\n\n${evidence || "No evidence claim passed the source validation gate."}\n\n## Human review\n\n${md(r.human_review)}\n`;
+    const kindora = kindoraAsMarkdown(r.kindora_research || {});
+    return `# Funder Pursuit Advisor: ${md(r.recommendation)}\n\n**Foundation:** ${md(report.foundationName)}  \n**Nonprofit:** ${md(report.nonprofitName)}  \n**Research cutoff:** ${md(r.research_cutoff)}  \n**Confidence:** ${md(r.confidence)}\n\n## Decision\n\n${md(r.decision_reason)}\n\n**Next action:** ${md(r.next_action)}\n\n${r.reopen_condition ? `**Reopen when:** ${md(r.reopen_condition)}\n\n` : ""}**Hours at risk:** ${r.hours_at_risk ?? "Unknown"}  \n**Staff cost at risk:** ${r.cost_at_risk === null ? "Not supplied" : formatMoney(r.cost_at_risk)}\n\n## Hard gates\n\n${gates || "No hard-gate findings returned."}\n\n## Access\n\n**${md(humanize(r.access.status))}:** ${md(r.access.reason)}\n\n## Observed grant pattern\n\n**${md(humanize(r.observed_pattern.status))}:** ${md(r.observed_pattern.reason)}\n\n${kindora}\n\n## Missing evidence\n\n${(r.missing_evidence || []).map((item) => `- ${md(item)}`).join("\n") || "None recorded."}\n\n## Evidence ledger\n\n${evidence || "No evidence claim passed the source validation gate."}\n\n## Human review\n\n${md(r.human_review)}\n`;
+  }
+
+  function kindoraAsMarkdown(data) {
+    const grants = (data.grants || []).map((grant) => {
+      const amount = grant.amount === null || grant.amount === undefined ? "amount not supplied" : formatMoney(grant.amount);
+      const link = safeUrl(grant.underlying_source_url) || safeUrl(data.matched_funder?.kindora_url) || "https://www.kindora.co";
+      return `- **${md(grant.recipient_name || "Recipient not supplied")} · ${md(amount)}${grant.filing_year ? ` · ${md(grant.filing_year)}` : ""}.** ${md(grant.purpose || "Purpose not supplied")} [Source](${link})`;
+    }).join("\n");
+    return `## Structured grant evidence\n\n**Status:** ${md(humanize(data.status || "unavailable"))}  \n**Source:** [Data from Kindora](${safeUrl(data.attribution_url) || "https://www.kindora.co"})\n\n${grants || "No itemized Kindora grant records were available."}\n\nKindora records are provider-derived unless an underlying source link is shown. They cannot independently force a decline or prove a warm relationship.`;
   }
 
   function reportFilename(extension) {

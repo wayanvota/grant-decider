@@ -19,7 +19,7 @@ The tool returns one of four states:
 - `PURSUE`: the evidence supports one bounded next step within a user-supplied time ceiling.
 - `NEEDS HUMAN CHECK`: identity, source coverage, or a material fact cannot be verified responsibly.
 
-There is no numeric fit score. The research engine extracts public evidence; deterministic service rules apply the final status. Every completed result includes direct source links, hard-gate findings, access, observed grant patterns, counterevidence, missing evidence, research cutoff, filing periods, hours at risk, and cost at risk when supplied.
+There is no numeric fit score. The research engine extracts public evidence; deterministic service rules apply the final status. Kindora supplies bounded structured identity, 990, itemized-grant, giving-statistics, and exact-foundation open-program records. Its data is attributed and treated as provider-derived unless an underlying source link is present. Every completed result includes direct source links, hard-gate findings, access, observed grant patterns, counterevidence, missing evidence, research cutoff, filing periods, hours at risk, and cost at risk when supplied.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ There is no numeric fit score. The research engine extracts public evidence; det
 - `docs/funder-pursuit-agent-prd.md`: approved product requirements and release boundaries.
 - `test/site.test.js`: static product-contract and safety checks.
 
-The public research service is shared with Grant Fit Auditor. `POST /pursuit` uses the existing server-side OpenAI credential, disables OpenAI response storage, queries public sources, and does not keep a server-side nonprofit profile or decision history.
+The public research service is shared with Grant Fit Auditor. `POST /pursuit` uses the existing server-side OpenAI credential, disables OpenAI response storage, queries public sources, and does not keep a server-side nonprofit profile or decision history. It also calls Kindora's read-only public MCP through a fixed six-tool allowlist and sends only the foundation identity and bounded search arguments. The nonprofit profile is not sent to Kindora.
 
 ## Local check
 

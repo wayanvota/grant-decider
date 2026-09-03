@@ -49,3 +49,13 @@ test("unsafe source schemes cannot become result links", async () => {
   assert.match(app, /escapeHtml\(url\)/);
   assert.match(app, /noopener noreferrer/);
 });
+
+test("Kindora structured grants are visible, attributed, and bounded", async () => {
+  const [about, app, readme] = await Promise.all([read("about.html"), read("app.js"), read("README.md")]);
+  assert.match(app, /kindora_research/);
+  assert.match(app, /Structured grant evidence/);
+  assert.match(app, /Data from Kindora/);
+  assert.match(app, /cannot independently force a decline/);
+  assert.match(about, /provider-derived/);
+  assert.match(readme, /six-tool allowlist/);
+});
