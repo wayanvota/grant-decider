@@ -1,0 +1,10 @@
+{
+  "name": "funder-pursuit-advisor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Evidence-led foundation pursuit decisions for nonprofits.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
