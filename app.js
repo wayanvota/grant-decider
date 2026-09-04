@@ -29,13 +29,17 @@
 
   restoreProfile();
   form.addEventListener("submit", submitResearch);
+  form.elements.relationshipStatus.addEventListener("change", updateRelationshipRequirement);
+  form.elements.knownPaths.addEventListener("input", updateRelationshipRequirement);
   clearProfile.addEventListener("click", clearSavedProfile);
   resultShell.addEventListener("click", handleResultAction);
+  updateRelationshipRequirement();
 
   async function submitResearch(event) {
     event.preventDefault();
     hideError();
 
+    updateRelationshipRequirement();
     if (!form.reportValidity()) return;
     const payload = Object.fromEntries(new FormData(form).entries());
     if (Number(payload.askMin) > Number(payload.askMax)) {
@@ -362,7 +366,7 @@
       return `# Funder Pursuit Advisor: Human Check\n\n**Foundation:** ${md(report.foundationName)}\n\n**Reason:** ${md(r.explanation)}\n\n**Reason code:** ${md(r.reason_code)}\n\nNo pursuit judgment was created.\n`;
     }
     const gates = (r.hard_gates || []).map((gate) => `- **${md(humanize(gate.category))}: ${md(gate.status.toUpperCase())}.** ${md(gate.reason)}`).join("\n");
-    const evidence = (r.evidence_ledger || []).map((item, index) => `${index + 1}. **${md(item.claim)}** [${md(item.source_title)}](${item.source_url})\n   - ${md(item.support)}\n   - ${md(humanize(item.evidence_type))}; ${md(item.confidence)} confidence${item.tax_period ? `; tax period ${md(item.tax_period)}` : ""}`).join("\n");
+    const evidence = (r.evidence_ledger || []).map((item, index) => `${index + 1}. **${md(item.claim)}** ${markdownLink(item.source_title, item.source_url)}\n   - ${md(item.support)}\n   - ${md(humanize(item.evidence_type))}; ${md(item.confidence)} confidence${item.tax_period ? `; tax period ${md(item.tax_period)}` : ""}`).join("\n");
     const kindora = kindoraAsMarkdown(r.kindora_research || {});
     return `# Funder Pursuit Advisor: ${md(r.recommendation)}\n\n**Foundation:** ${md(report.foundationName)}  \n**Nonprofit:** ${md(report.nonprofitName)}  \n**Research cutoff:** ${md(r.research_cutoff)}  \n**Confidence:** ${md(r.confidence)}\n\n## Decision\n\n${md(r.decision_reason)}\n\n**Next action:** ${md(r.next_action)}\n\n${r.reopen_condition ? `**Reopen when:** ${md(r.reopen_condition)}\n\n` : ""}**Hours at risk:** ${r.hours_at_risk ?? "Unknown"}  \n**Staff cost at risk:** ${r.cost_at_risk === null ? "Not supplied" : formatMoney(r.cost_at_risk)}\n\n## Hard gates\n\n${gates || "No hard-gate findings returned."}\n\n## Access\n\n**${md(humanize(r.access.status))}:** ${md(r.access.reason)}\n\n## Observed grant pattern\n\n**${md(humanize(r.observed_pattern.status))}:** ${md(r.observed_pattern.reason)}\n\n${kindora}\n\n## Missing evidence\n\n${(r.missing_evidence || []).map((item) => `- ${md(item)}`).join("\n") || "None recorded."}\n\n## Evidence ledger\n\n${evidence || "No evidence claim passed the source validation gate."}\n\n## Human review\n\n${md(r.human_review)}\n`;
   }
@@ -371,9 +375,9 @@
     const grants = (data.grants || []).map((grant) => {
       const amount = grant.amount === null || grant.amount === undefined ? "amount not supplied" : formatMoney(grant.amount);
       const link = safeUrl(grant.underlying_source_url) || safeUrl(data.matched_funder?.kindora_url) || "https://www.kindora.co";
-      return `- **${md(grant.recipient_name || "Recipient not supplied")} · ${md(amount)}${grant.filing_year ? ` · ${md(grant.filing_year)}` : ""}.** ${md(grant.purpose || "Purpose not supplied")} [Source](${link})`;
+      return `- **${md(grant.recipient_name || "Recipient not supplied")} · ${md(amount)}${grant.filing_year ? ` · ${md(grant.filing_year)}` : ""}.** ${md(grant.purpose || "Purpose not supplied")} ${markdownLink("Source", link)}`;
     }).join("\n");
-    return `## Structured grant evidence\n\n**Status:** ${md(humanize(data.status || "unavailable"))}  \n**Source:** [Data from Kindora](${safeUrl(data.attribution_url) || "https://www.kindora.co"})\n\n${grants || "No itemized Kindora grant records were available."}\n\nKindora records are provider-derived unless an underlying source link is shown. They cannot independently force a decline or prove a warm relationship.`;
+    return `## Structured grant evidence\n\n**Status:** ${md(humanize(data.status || "unavailable"))}  \n**Source:** ${markdownLink("Data from Kindora", safeUrl(data.attribution_url) || "https://www.kindora.co")}\n\n${grants || "No itemized Kindora grant records were available."}\n\nKindora records are provider-derived unless an underlying source link is shown. They cannot independently force a decline or prove a warm relationship.`;
   }
 
   function reportFilename(extension) {
@@ -422,6 +426,7 @@
       if (!form.elements[name]) continue;
       form.elements[name].value = name === "researchHours" ? "4" : name === "cultivationHours" ? "12" : name === "applicationHours" ? "30" : name === "structure" ? "standalone" : name === "relationshipStatus" ? "none" : "";
     }
+    updateRelationshipRequirement();
     clearProfile.textContent = "Saved profile cleared";
     setTimeout(() => { clearProfile.textContent = "Clear saved profile"; }, 1800);
   }
@@ -441,6 +446,23 @@
       const url = new URL(value);
       return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
     } catch { return null; }
+  }
+
+  function markdownLink(label, value) {
+    const url = safeUrl(value);
+    if (!url) return md(label);
+    const destination = url.replace(/[()<>\\\s]/g, (character) => encodeURIComponent(character));
+    return `[${md(label)}](<${destination}>)`;
+  }
+
+  function updateRelationshipRequirement() {
+    const relationshipStatus = form.elements.relationshipStatus.value;
+    const knownPaths = form.elements.knownPaths;
+    const requiresPath = ["warm_path", "current_funder"].includes(relationshipStatus);
+    knownPaths.required = requiresPath;
+    knownPaths.setCustomValidity(requiresPath && knownPaths.value.trim().length < 10
+      ? "Name the confirmed relationship route and why your team considers it real."
+      : "");
   }
 
   function formatMoney(value) {

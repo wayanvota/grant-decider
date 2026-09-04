@@ -3,8 +3,30 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://grant-fit-auditor.onrender.com; img-src 'self' data:; font-src 'self'">
     <title>Funder Pursuit Advisor</title>
     <meta name="description" content="Research a foundation before your nonprofit commits scarce staff time.">
+    <link rel="canonical" href="https://wayan.com/grant-decider/">
+    <link rel="icon" href="https://wayan.com/tool-assets/wayan-favicon.ico" sizes="32x32" type="image/x-icon">
+    <link rel="shortcut icon" href="https://wayan.com/tool-assets/wayan-favicon.ico" type="image/x-icon">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Wayan Vota AI Tools">
+    <meta property="og:title" content="Funder Pursuit Advisor">
+    <meta property="og:description" content="Research a foundation before your nonprofit commits scarce staff time.">
+    <meta property="og:url" content="https://wayan.com/grant-decider/">
+    <meta property="og:image" content="https://wayan.com/tool-assets/wayan-ai-tools-share.jpg">
+    <meta property="og:image:secure_url" content="https://wayan.com/tool-assets/wayan-ai-tools-share.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="627">
+    <meta property="og:image:alt" content="AI tools built by Wayan. Practical prototypes with visible evidence and human judgment.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@wayan_vota">
+    <meta name="twitter:title" content="Funder Pursuit Advisor">
+    <meta name="twitter:description" content="Research a foundation before your nonprofit commits scarce staff time.">
+    <meta name="twitter:image" content="https://wayan.com/tool-assets/wayan-ai-tools-share.jpg">
+    <meta name="twitter:image:alt" content="AI tools built by Wayan. Practical prototypes with visible evidence and human judgment.">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -55,7 +77,7 @@
               <div class="field-grid">
                 <label class="field field-wide">
                   <span>Foundation name <b aria-hidden="true">*</b></span>
-                  <input name="foundationName" autocomplete="organization" required maxlength="300" placeholder="Example Foundation">
+                  <input name="foundationName" autocomplete="organization" required minlength="2" maxlength="300" placeholder="Example Foundation">
                 </label>
                 <label class="field">
                   <span>Official website</span>
@@ -81,7 +103,7 @@
                 </label>
                 <label class="field">
                   <span>Nonprofit EIN</span>
-                  <input name="organizationEin" inputmode="numeric" maxlength="10" placeholder="12-3456789">
+                  <input name="organizationEin" inputmode="numeric" maxlength="10" placeholder="12-3456789" pattern="[0-9]{2}-?[0-9]{7}">
                 </label>
                 <label class="field field-wide">
                   <span>Mission and program model <b aria-hidden="true">*</b></span>
@@ -101,7 +123,7 @@
                 </label>
                 <label class="field">
                   <span>Annual organizational budget <b aria-hidden="true">*</b></span>
-                  <span class="money-input"><span aria-hidden="true">$</span><input name="annualBudget" type="number" min="0" step="1000" required inputmode="decimal"></span>
+                  <span class="money-input"><span aria-hidden="true">$</span><input name="annualBudget" type="number" min="0" max="1000000000000" step="1000" required inputmode="decimal"></span>
                 </label>
                 <label class="field">
                   <span>Tax status <b aria-hidden="true">*</b></span>
@@ -141,11 +163,11 @@
                 </label>
                 <label class="field">
                   <span>Minimum viable request <b aria-hidden="true">*</b></span>
-                  <span class="money-input"><span aria-hidden="true">$</span><input name="askMin" type="number" min="0" step="1000" required inputmode="decimal"></span>
+                  <span class="money-input"><span aria-hidden="true">$</span><input name="askMin" type="number" min="0" max="1000000000000" step="1000" required inputmode="decimal"></span>
                 </label>
                 <label class="field">
                   <span>Maximum useful request <b aria-hidden="true">*</b></span>
-                  <span class="money-input"><span aria-hidden="true">$</span><input name="askMax" type="number" min="0" step="1000" required inputmode="decimal"></span>
+                  <span class="money-input"><span aria-hidden="true">$</span><input name="askMax" type="number" min="0" max="1000000000000" step="1000" required inputmode="decimal"></span>
                 </label>
                 <label class="field field-wide">
                   <span>Restrictions you will not accept</span>
@@ -163,7 +185,7 @@
               <div class="field-grid">
                 <label class="field">
                   <span>Relationship position</span>
-                  <select name="relationshipStatus">
+                  <select name="relationshipStatus" aria-describedby="relationship-help">
                     <option value="none">No known path</option>
                     <option value="possible_path">Possible path, not confirmed</option>
                     <option value="warm_path">Confirmed warm path</option>
@@ -172,19 +194,20 @@
                 </label>
                 <label class="field field-wide">
                   <span>Known path or relationship note</span>
-                  <textarea name="knownPaths" maxlength="1200" rows="3" placeholder="Name the route and why your team considers it real. This remains user-supplied evidence."></textarea>
+                  <textarea name="knownPaths" maxlength="1200" rows="3" aria-describedby="relationship-help" placeholder="Name the route and why your team considers it real. This remains user-supplied evidence."></textarea>
+                  <small id="relationship-help">A warm or current relationship requires a named route. The tool treats this as your claim, not public proof.</small>
                 </label>
                 <div class="field field-wide">
                   <span class="field-label">Expected staff hours if pursued</span>
                   <div class="hours-grid">
-                    <label><span>Research</span><input name="researchHours" type="number" min="0" step="0.5" inputmode="decimal" value="4"></label>
-                    <label><span>Cultivation</span><input name="cultivationHours" type="number" min="0" step="0.5" inputmode="decimal" value="12"></label>
-                    <label><span>Application</span><input name="applicationHours" type="number" min="0" step="0.5" inputmode="decimal" value="30"></label>
+                    <label><span>Research</span><input name="researchHours" type="number" min="0" max="10000" step="0.5" required inputmode="decimal" value="4"></label>
+                    <label><span>Cultivation</span><input name="cultivationHours" type="number" min="0" max="10000" step="0.5" required inputmode="decimal" value="12"></label>
+                    <label><span>Application</span><input name="applicationHours" type="number" min="0" max="10000" step="0.5" required inputmode="decimal" value="30"></label>
                   </div>
                 </div>
                 <label class="field">
                   <span>Loaded staff cost per hour</span>
-                  <span class="money-input"><span aria-hidden="true">$</span><input name="loadedHourlyCost" type="number" min="0" step="1" inputmode="decimal" placeholder="Optional"></span>
+                  <span class="money-input"><span aria-hidden="true">$</span><input name="loadedHourlyCost" type="number" min="0" max="100000" step="1" inputmode="decimal" placeholder="Optional"></span>
                 </label>
               </div>
               <div class="privacy-control">

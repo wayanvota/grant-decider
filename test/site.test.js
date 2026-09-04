@@ -59,3 +59,38 @@ test("Kindora structured grants are visible, attributed, and bounded", async () 
   assert.match(about, /provider-derived/);
   assert.match(readme, /six-tool allowlist/);
 });
+
+test("the browser applies a restrictive content policy and referrer policy", async () => {
+  const [home, about] = await Promise.all([read("index.html"), read("about.html")]);
+  for (const content of [home, about]) {
+    assert.match(content, /Content-Security-Policy/);
+    assert.match(content, /object-src 'none'/);
+    assert.match(content, /script-src 'self'/);
+    assert.match(content, /name="referrer"/);
+  }
+  assert.match(home, /connect-src https:\/\/grant-fit-auditor\.onrender\.com/);
+});
+
+test("a claimed warm or current relationship requires a named route", async () => {
+  const [home, app] = await Promise.all([read("index.html"), read("app.js")]);
+  assert.match(home, /id="relationship-help"/);
+  assert.match(app, /\["warm_path", "current_funder"\]\.includes/);
+  assert.match(app, /knownPaths\.required = requiresPath/);
+  assert.match(app, /knownPaths\.value\.trim\(\)\.length < 10/);
+});
+
+test("money, time, and EIN inputs have browser-side bounds", async () => {
+  const home = await read("index.html");
+  assert.match(home, /name="organizationEin"[^>]+pattern="\[0-9\]/);
+  assert.match(home, /name="annualBudget"[^>]+max="1000000000000"/);
+  assert.match(home, /name="researchHours"[^>]+max="10000"[^>]+required/);
+  assert.match(home, /name="loadedHourlyCost"[^>]+max="100000"/);
+});
+
+test("downloaded Markdown sanitizes every generated link destination", async () => {
+  const app = await read("app.js");
+  assert.match(app, /markdownLink\(item\.source_title, item\.source_url\)/);
+  assert.match(app, /markdownLink\("Source", link\)/);
+  assert.match(app, /url\.replace\(\/\[\(\)<>/);
+  assert.doesNotMatch(app, /\]\(\$\{item\.source_url\}\)/);
+});
