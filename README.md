@@ -30,6 +30,7 @@ There is no numeric fit score. The research engine extracts public evidence; det
 - `config.js`: server-side research API location.
 - `docs/funder-pursuit-agent-prd.md`: approved product requirements and release boundaries.
 - `test/site.test.js`: static product-contract and safety checks.
+- `TEST-REPORT.md`: 20-case nonprofit-behavior and adversarial release verification.
 
 The public research service is shared with Grant Fit Auditor. `POST /pursuit` uses the existing server-side OpenAI credential, disables OpenAI response storage, queries public sources, and does not keep a server-side nonprofit profile or decision history. It also calls Kindora's read-only public MCP through a fixed six-tool allowlist and sends only the foundation identity and bounded search arguments. The nonprofit profile is not sent to Kindora.
 
